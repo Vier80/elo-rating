@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ELO Rating</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: sports-desk scoreboard, clinical and fast to read.
+   IDEA: the federation ranking ladder printed on a results board.
+   PICTURE: live leaderboard + the selected athlete's rating curve.
+   COLOUR and TYPE: one committed sport colour per tab (mint, steel, red, green) on white / deep night; Barlow Condensed numbers.
+   LAYOUT: title + sport tabs, pool chips, leaderboard left, athlete card right; stacks under 900px. */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0e1417);--ink:light-dark(#10181c,#e8eef0);--mute:light-dark(#5c6a70,#93a3a9);--line:light-dark(#e3e8ea,#243035);--card:light-dark(#f5f7f8,#151e22);--sp:#c94a4a;--spl:light-dark(#fbe9e9,#3a1d1f);--up:light-dark(#1d7a4a,#5fd39a);--dn:light-dark(#b23a3a,#ff8a8a)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+body[data-sport=badminton]{--sp:light-dark(#139a7a,#4fd1ad);--spl:light-dark(#e2f6f0,#123a31)}
+body[data-sport=scherma]{--sp:light-dark(#2f5d9e,#7fa8e6);--spl:light-dark(#e6edf8,#18273d)}
+body[data-sport=judo]{--sp:light-dark(#c94a4a,#f08a8a);--spl:light-dark(#fbe9e9,#3a1d1f)}
+body[data-sport=tennistavolo]{--sp:light-dark(#6a3fa0,#b99be6);--spl:light-dark(#efe8f8,#2a1d3d)}
+body[data-sport=squash]{--sp:light-dark(#c8620f,#f5a35c);--spl:light-dark(#fcecdd,#3a2414)}
+body[data-sport=tennis]{--sp:light-dark(#5f7d00,#bcd94a);--spl:light-dark(#f0f6dc,#25300c)}
+body[data-sport=vela]{--sp:light-dark(#0b6fa8,#6cc4f0);--spl:light-dark(#e3f1fa,#10283a)}
+body[data-sport=wrestling]{--sp:light-dark(#3f7d2c,#8fd174);--spl:light-dark(#e9f4e4,#1d3316)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,sans-serif;overflow-x:clip}
+h1,h2,.num,.tab{font-family:"Barlow Condensed",Barlow,sans-serif}
+header{background:var(--sp);color:#fff;padding:22px max(4vw,16px) 0}
+header .row{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px;max-width:1240px;margin:auto}
+h1{margin:0;font-size:clamp(34px,5vw,50px);line-height:1.05;font-weight:800;letter-spacing:.01em}
+.meta{font-size:14px;opacity:.9}
+.tabs{display:flex;gap:4px;max-width:1240px;margin:16px auto 0;overflow-x:auto}
+.tab{flex:none;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:20px;font-weight:700;padding:10px 18px;min-height:44px;border-radius:10px 10px 0 0;cursor:pointer}
+.tab[aria-selected=true]{background:var(--bg);color:var(--sp)}
+.tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sp);outline-offset:2px}
+main{max-width:1240px;margin:auto;padding:18px max(4vw,16px) 48px}
+.chips{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}.chiprow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.rowlab{font:700 16px "Barlow Condensed";color:var(--sp);width:96px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Barlow,sans-serif;padding:8px 12px;min-height:40px;border-radius:20px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--sp);border-color:var(--sp);color:#fff}
+.tools{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px;font-size:15px}
+input[type=search],select{font:16px Barlow,sans-serif;padding:9px 12px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+input[type=search]{flex:1 1 220px}
+label.t{display:flex;align-items:center;gap:6px;white-space:nowrap}
+input[type=range]{accent-color:var(--sp);width:110px}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font:600 13px Barlow,sans-serif;color:var(--mute);text-align:left;padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line)}
+td.r,th.r{text-align:right;white-space:nowrap}
+.num{font-size:19px;font-weight:700}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--card)}
+tr.sel{background:var(--spl)!important}
+tr.ita td:nth-child(2){font-weight:600}
+.noc{font:600 12px Barlow,sans-serif;color:var(--mute);margin-left:6px}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.more{margin:12px 0;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Barlow;padding:10px 16px;border-radius:10px;cursor:pointer;min-height:44px}
+.card{background:var(--card);border-radius:14px;padding:18px;position:sticky;top:12px}
+@media(max-width:900px){.card{position:static}}
+.card h2{margin:0;font-size:30px;line-height:1.05}
+.big{display:flex;flex-wrap:wrap;gap:6px 22px;margin:10px 0 6px}
+.big div{font-size:13px;color:var(--mute)}.big b{display:block;font:800 30px "Barlow Condensed";color:var(--ink)}
+.big b.sp{color:var(--sp)}
+.fig{position:relative;height:200px;margin:8px 0 12px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.ml{list-style:none;margin:0;padding:0;font-size:14px}
+.ml li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.ml .res{font:700 15px "Barlow Condensed";min-width:20px}
+.ml small{color:var(--mute);display:block}
+.h2h{margin:14px 0 12px;padding:12px 0 14px;border-block:2px solid var(--line)}
+.h2h h3{margin:0 0 8px;font-size:17px}
+.bar{display:flex;height:34px;border-radius:8px;overflow:hidden;font:700 16px "Barlow Condensed";color:#fff;margin-top:10px}
+.bar span{display:flex;align-items:center;padding:0 10px;white-space:nowrap}
+.bar .a{background:var(--sp)}.bar .b{background:#6b7a80;justify-content:flex-end}
+.empty{color:var(--mute);padding:30px 0}
+details{margin-top:28px;font-size:15px;border-top:1px solid var(--line);padding-top:14px}
+summary{cursor:pointer;font-weight:600;min-height:32px}
+.note{font-size:13px;color:var(--mute);margin-top:6px}
+.scroll{overflow-x:auto}
+@media(max-width:600px){table{font-size:13px}.hide-s{display:none}.num{font-size:17px}}
+</style>
+</head>
+<body data-sport="judo">
+<header>
+  <div class="row"><h1>ELO Rating</h1><span class="meta" id="meta">Caricamento dati…</span></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+</header>
+<main>
+  <div class="chips" id="pools" aria-label="Categoria"></div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Cerca atleta o NOC (es. ITA)" aria-label="Cerca atleta">
+    <label class="t"><input type="checkbox" id="ita"> Solo ITA</label>
+    <label class="t" id="lmin">Min. incontri <select id="minm"><option>1</option><option>3</option><option selected>5</option><option>10</option></select></label>
+    <label class="t">K <input type="range" id="k" min="16" max="48" step="4" value="32"><span id="kv" class="num">32</span></label>
+  </div>
+  <div class="grid">
+    <section aria-label="Classifica">
+      <div class="scroll"><table>
+        <thead id="th"><tr><th class="r">#</th><th>Atleta</th><th class="r">ELO</th><th class="r hide-s">Picco</th><th class="r" id="thwl">V–S</th><th class="r">90 gg</th><th class="r hide-s">Ultimo</th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table></div>
+      <button class="more" id="more" hidden>Mostra altri</button>
+    </section>
+    <aside class="card" id="card"><p class="empty">Seleziona un atleta dalla classifica.</p></aside>
+  </div>
+  <details>
+    <summary>Come è calcolato il rating</summary>
+    <p>Ogni atleta (o coppia, nel doppio del badminton) parte da 1500 in ciascuna categoria: specialità per il badminton, arma e sesso per la scherma, categoria di peso per judo e lotta. Gli incontri sono elaborati in ordine di data e turno; dopo ogni incontro il vincitore guadagna e lo sconfitto perde K × peso torneo × (1 − probabilità attesa). La probabilità attesa è 1 / (1 + 10<sup>(Rb − Ra)/400</sup>). Nei primi 8 incontri di un atleta K è moltiplicato per 1,5 perché il rating si assesti prima.</p>
+    <p id="weights"></p>
+    <p>Vela: ogni regata conta come un confronto con tutte le altre barche della classifica finale. Chi arriva davanti a una barca la "batte"; la variazione è la somma di vittorie meno attese su tutte le barche, divisa per il numero di avversari e moltiplicata per K × peso evento × 3. Nelle prime 3 regate di una barca il fattore è ×1,5. Escluse le barche mai partite.</p>
+    <p>Tennis: qui l'ELO non è calcolato dall'app ma ripreso da Tennis Abstract (tennisabstract.com), primi 200 giocatori ATP e 200 WTA, con i rating per superficie. È su una scala diversa dagli altri sport. NOC indicato solo per i giocatori italiani.</p>
+    <p>Incontri esclusi: walkover, gare a squadre della scherma, righe senza vincitore determinabile. Fonte: i database Notion Agente Badminton, Agente Scherma, Agente Judo, Agente Wrestling, Agente Tennis Tavolo, Agente Squash e Agente Vela.</p>
+  </details>
+</main>
+<script type="application/json" id="elo-data">__DATA__</script>
+<script>
+{
+const SPORTS={badminton:"Badminton",judo:"Judo",wrestling:"Lotta",scherma:"Scherma",squash:"Squash",tennis:"Tennis",tennistavolo:"Tennistavolo",vela:"Vela"};
+const W={
+  badminton:{"Mondiali":1.3,"Super 1000":1.2,"Super 750":1.15,"Super 500":1.05,"Super 300":1},
+  scherma:{"Campionati del Mondo":1.3,"Grand Prix":1.15,"Campionati continentali":1.05,"Coppa del Mondo":1},
+  judo:{"Mondiali":1.3,"Grand Slam":1.15,"Campionati continentali":1.05,"Giochi continentali":1,"Grand Prix":1},
+  wrestling:{"Olimpiadi":1.4,"Mondiali":1.3,"Campionati continentali":1.05,"Giochi continentali":1,"Ranking Series":1,"Altri tornei":.85},
+  tennistavolo:{"Mondiali":1.3,"WTT Finals":1.25,"World Cup":1.2,"Smash":1.15,"Champions":1.1,"Star Contender":1,"Contender":.9},
+  squash:{"Mondiali":1.3,"Tour Finals":1.2,"PSA World Tour":1},
+  vela:{"Olimpiadi":1.4,"Mondiali":1.3,"Sailing Grand Slam":1.1,"Europei":1.05,"Giochi continentali":1,"Altre regate":.9}};
+const VELA_F=3;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $=id=>document.getElementById(id);
+let DATA=null,sport="judo",pool=0,K=32,shown=50,sel=null,cmp=null,CALC={};
+const st=(()=>{try{return JSON.parse(localStorage.getItem("elo-st")||"{}")}catch(e){return{}}})();
+const save=()=>{try{localStorage.setItem("elo-st",JSON.stringify({sport,K,ita:$("ita").checked,minm:$("minm").value}))}catch(e){}};
+
+function computeVela(){
+  const d=DATA.sports.vela,w=W.vela,R=new Map(),E=d.events,now=E.length?E[E.length-1][0]:"";
+  const cut=now?new Date(new Date(now).getTime()-90*864e5).toISOString().slice(0,10):"";
+  const get=(p,a)=>{const key=p+":"+a;let s=R.get(key);if(!s){s={a,p,r:1500,peak:1500,n:0,w:0,l:0,best:999,last:"",hist:[],old:1500};R.set(key,s)}return s};
+  E.forEach(([dt,p,t,res],i)=>{
+    const S=res.map(([a,pos])=>[get(p,a),pos]),pre=S.map(([s])=>s.r),N=S.length,lw=w[d.tournaments[t][1]]??1;
+    S.forEach(([s,pos],x)=>{
+      let sum=0;
+      for(let y=0;y<N;y++){if(y===x)continue;const e=1/(1+10**((pre[y]-pre[x])/400));const o=S[y][1];sum+=(pos<o?1:pos===o?.5:0)-e}
+      const dl=K*VELA_F*lw*(s.n<3?1.5:1)*sum/(N-1);
+      if(dt<cut)s.old=s.r;
+      s.r+=dl;s.n++;s.w++;s.best=Math.min(s.best,pos);s.last=dt;
+      if(dt<cut)s.old=s.r;
+      s.peak=Math.max(s.peak,s.r);s.hist.push([i,s.r,dl,pos,N]);
+    });
+  });
+  const byPool=d.pools.map(()=>[]);
+  for(const s of R.values())byPool[s.p].push(s);
+  byPool.forEach(l=>l.sort((x,y)=>y.r-x.r));
+  return {byPool,R};
+}
+function computeTennis(){
+  const d=DATA.sports.tennis,R=new Map(),byPool=d.pools.map(()=>[]);
+  for(const [p,rk,a,age,elo,hh,cc,gg,peak,pm,tr] of d.players){
+    const s={a,p,r:elo,surf:{g:elo,h:hh,c:cc,e:gg},peak,pm,tr,age,src:rk,n:1e9,w:0,l:0,hist:[],last:"",old:elo};
+    R.set(p+":"+a,s);byPool[p].push(s);
+  }
+  byPool.forEach(l=>l.sort((x,y)=>y.r-x.r));
+  return {byPool,R};
+}
+const SURF={g:"Generale",h:"Cemento",c:"Terra",e:"Erba"};
+function compute(sp){
+  if(sp==="tennis")return computeTennis();
+  if(sp==="vela")return computeVela();
+  const d=DATA.sports[sp],w=W[sp],R=new Map(),now=d.matches.length?d.matches[d.matches.length-1][0]:"";
+  const cut=now?new Date(new Date(now).getTime()-90*864e5).toISOString().slice(0,10):"";
+  const get=(p,a)=>{const key=p+":"+a;let s=R.get(key);if(!s){s={a,p,r:1500,peak:1500,n:0,w:0,l:0,last:"",hist:[],old:1500};R.set(key,s)}return s};
+  d.matches.forEach((m,i)=>{
+    const [dt,p,t,,wi,li]=m,a=get(p,wi),b=get(p,li);
+    const lw=w[d.tournaments[t][1]]??1;
+    const ea=1/(1+10**((b.r-a.r)/400));
+    const ka=K*lw*(a.n<8?1.5:1),kb=K*lw*(b.n<8?1.5:1);
+    if(dt<cut){a.old=a.r;b.old=b.r}
+    const da=ka*(1-ea),db=-kb*(1-ea);
+    a.r+=da;b.r+=db;a.n++;b.n++;a.w++;b.l++;a.last=b.last=dt;
+    if(dt<cut){a.old=a.r;b.old=b.r}
+    a.peak=Math.max(a.peak,a.r);
+    a.hist.push([i,a.r,da]);b.hist.push([i,b.r,db]);
+  });
+  const byPool=d.pools.map(()=>[]);
+  for(const s of R.values())byPool[s.p].push(s);
+  byPool.forEach(l=>l.sort((x,y)=>y.r-x.r));
+  return {byPool,R};
+}
+
+function renderTabs(){
+  $("tabs").innerHTML=Object.entries(SPORTS).map(([k,v])=>`<button class="tab" role="tab" aria-selected="${k===sport}" data-s="${k}">${v}</button>`).join("");
+  const d=DATA.sports[sport];
+  const WL={"Freestyle":"Libera","Greco-Roman":"Greco-romana","Women's Wrestling":"Femminile"};
+  const VL={"Men's Laser ILCA 7":"ILCA 7","Men's iQFOIL":"iQFOiL","Men's 49er":"49er","Men's Kite":"Formula Kite","Women's Laser Radial ILCA 6":"ILCA 6","Women's iQFOIL":"iQFOiL","Women's 49er FX":"49er FX","Women's Kite":"Formula Kite","Mixed 470":"470","Nacra 17":"Nacra 17"};
+  const lab=n=>sport==="wrestling"?n.replace(/^.*?(\d+ kg)$/,"$1"):sport==="vela"?(VL[n]||n):n;
+  const head=r=>{if(sport==="vela"){const n=d.pools[r[0]];return `<span class="rowlab">${n.startsWith("Men")?"Maschile":n.startsWith("Women")?"Femminile":"Misto"}</span>`}if(sport!=="wrestling")return"";const s=d.pools[r[0]].replace(/ \d+ kg$/,"");return `<span class="rowlab">${esc(WL[s]||s)}</span>`};
+  const chip=i=>`<button class="chip" aria-pressed="${i===pool}" data-p="${i}">${esc(lab(d.pools[i]))}</button>`;
+  $("pools").innerHTML=poolRows(sport).map(r=>`<div class="chiprow">${head(r)}${r.map(chip).join("")}</div>`).join("")||'<span class="empty">Nessun dato caricato per questo sport.</span>';
+  document.body.dataset.sport=sport;
+  const T=sport==="tennis";
+  $("th").innerHTML=T?'<tr><th class="r">#</th><th>Giocatore</th><th class="r">ELO</th><th class="r">Cemento</th><th class="r">Terra</th><th class="r">Erba</th><th class="r hide-s">Picco</th><th class="r hide-s">Rank '+esc(d.pools[pool])+'</th></tr>':'<tr><th class="r">#</th><th>Atleta</th><th class="r">ELO</th><th class="r hide-s">Picco</th><th class="r" id="thwl">V–S</th><th class="r">90 gg</th><th class="r hide-s">Ultimo</th></tr>';
+  $("lmin").hidden=T;
+  if(T){$("meta").textContent=`ELO di Tennis Abstract · ${d.players.length} giocatori · ATP al ${d.updated.ATP||"–"}, WTA al ${d.updated.WTA||"–"}`;return}
+  const V=sport==="vela",n=V?d.events.length:d.matches.length;
+  $("meta").textContent=V?`${n} regate · ${d.events.reduce((a,e)=>a+e[3].length,0).toLocaleString("it-IT")} piazzamenti · ${d.athletes.length.toLocaleString("it-IT")} barche · aggiornato ${DATA.generated}`:`${n.toLocaleString("it-IT")} incontri · ${d.athletes.length.toLocaleString("it-IT")} atleti · aggiornato ${DATA.generated}`;
+  $("thwl").textContent=V?"Regate":"V–S";$("lmin").firstChild.textContent=V?"Min. regate ":"Min. incontri ";
+}
+
+const ORDER={squash:[["Maschile","Femminile"]],vela:[["Men's Laser ILCA 7","Men's iQFOIL","Men's 49er","Men's Kite"],["Women's Laser Radial ILCA 6","Women's iQFOIL","Women's 49er FX","Women's Kite"],["Mixed 470","Nacra 17"]],judo:[["M -60 kg","M -66 kg","M -73 kg","M -81 kg","M -90 kg","M -100 kg","M +100 kg"],["F -48 kg","F -52 kg","F -57 kg","F -63 kg","F -70 kg","F -78 kg","F +78 kg"]]};
+function poolRows(sp){
+  const P=DATA.sports[sp].pools,o=ORDER[sp];
+  if(sp==="wrestling"){
+    const kg=n=>parseFloat(n.replace(/^\D*/,""));
+    return ["Freestyle","Greco-Roman","Women's Wrestling"].map(s=>P.map((n,i)=>[n,i]).filter(([n])=>n.startsWith(s+" ")).sort((a,b)=>kg(a[0])-kg(b[0])).map(x=>x[1])).filter(r=>r.length);
+  }
+  if(!o)return P.length?[P.map((_,i)=>i)]:[];
+  const rows=o.map(r=>r.map(n=>P.indexOf(n)).filter(i=>i>=0));
+  const rest=P.map((_,i)=>i).filter(i=>!rows.flat().includes(i));
+  if(rest.length)rows.push(rest);
+  return rows.filter(r=>r.length);
+}
+const firstPool=sp=>(poolRows(sp)[0]||[0])[0];
+function list(){
+  const c=CALC[sport];if(!c||!c.byPool[pool])return [];
+  const q=$("q").value.trim().toLowerCase(),ita=$("ita").checked,mn=+$("minm").value,A=DATA.sports[sport].athletes;
+  let rank=0;
+  return c.byPool[pool].filter(s=>s.n>=mn).map(s=>({...s,rank:++rank})).filter(s=>{
+    const [nm,noc]=A[s.a];
+    if(ita&&noc!=="ITA")return false;
+    return !q||nm.toLowerCase().includes(q)||noc.toLowerCase()===q;
+  });
+}
+
+function renderTable(){
+  const L=list(),A=DATA.sports[sport].athletes;
+  if(!L.length){$("tb").innerHTML=`<tr><td colspan="7" class="empty">Nessun atleta con questi filtri.</td></tr>`;$("more").hidden=true;return}
+  const f=v=>v==null?"–":Math.round(v);
+  if(sport==="tennis"){$("tb").innerHTML=L.slice(0,shown).map(s=>{const [nm,noc]=A[s.a];
+    return `<tr data-a="${s.a}" class="${s.a===sel?"sel":""} ${noc==="ITA"?"ita":""}"><td class="r">${s.rank}</td><td>${esc(nm)}<span class="noc">${esc(noc)}</span></td><td class="r num">${f(s.r)}</td><td class="r">${f(s.surf.h)}</td><td class="r">${f(s.surf.c)}</td><td class="r">${f(s.surf.e)}</td><td class="r hide-s">${f(s.peak)} <span class="noc">${esc(s.pm)}</span></td><td class="r hide-s">${s.tr??"–"}</td></tr>`}).join("");
+    $("more").hidden=L.length<=shown;return}
+  $("tb").innerHTML=L.slice(0,shown).map(s=>{
+    const [nm,noc]=A[s.a],dl=Math.round(s.r-s.old);
+    return `<tr data-a="${s.a}" class="${s.a===sel?"sel":""} ${noc==="ITA"?"ita":""}"><td class="r">${s.rank}</td><td>${esc(nm)}<span class="noc">${esc(noc)}</span></td><td class="r num">${Math.round(s.r)}</td><td class="r hide-s">${Math.round(s.peak)}</td><td class="r">${sport==="vela"?s.n:s.w+"–"+s.l}</td><td class="r ${dl>0?"up":dl<0?"dn":""}">${dl>0?"+":""}${dl||"·"}</td><td class="r hide-s">${s.last.slice(8,10)}/${s.last.slice(5,7)}/${s.last.slice(2,4)}</td></tr>`}).join("");
+  $("more").hidden=L.length<=shown;
+}
+
+function chart(svg,h){
+  const draw=()=>{
+    const Wd=svg.clientWidth,H=svg.clientHeight,pad=34;
+    if(!Wd||h.length<2){svg.innerHTML="";return}
+    const ys=h.map(x=>x[1]),lo=Math.min(1500,...ys)-20,hi=Math.max(1500,...ys)+20;
+    const X=i=>pad+(Wd-pad-6)*i/(h.length-1),Y=v=>8+(H-26)*(1-(v-lo)/(hi-lo));
+    const pts=h.map((x,i)=>`${X(i).toFixed(1)},${Y(x[1]).toFixed(1)}`).join(" ");
+    const ticks=[lo+20,(lo+hi)/2,hi-20].map(v=>Math.round(v/10)*10);
+    svg.innerHTML=`${ticks.map(v=>`<line x1="${pad}" x2="${Wd}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${pad-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--mute)">${v}</text>`).join("")}
+    <line x1="${pad}" x2="${Wd}" y1="${Y(1500)}" y2="${Y(1500)}" stroke="var(--mute)" stroke-dasharray="3 4"/>
+    <polygon points="${X(0)},${H-18} ${pts} ${X(h.length-1)},${H-18}" fill="var(--sp)" opacity=".12"/>
+    <polyline points="${pts}" fill="none" stroke="var(--sp)" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="${X(h.length-1)}" cy="${Y(ys[ys.length-1])}" r="4.5" fill="var(--sp)"/>
+    <text x="${pad}" y="${H-3}" font-size="11" fill="var(--mute)">${h.length} incontri</text>`;
+  };
+  if(svg._ro)svg._ro.disconnect();svg._ro=new ResizeObserver(draw);svg._ro.observe(svg);draw();
+}
+
+function renderCard(){
+  const d=DATA.sports[sport],c=CALC[sport];
+  const s=sel!=null&&c.R.get(pool+":"+sel);
+  if(!s){$("card").innerHTML='<p class="empty">Seleziona un atleta dalla classifica.</p>';return}
+  if(sport==="tennis"){
+    const A=d.athletes,[nm,noc]=A[s.a],f=v=>v==null?"–":Math.round(v),rk=c.byPool[pool].indexOf(s)+1;
+    const opts=c.byPool[pool].filter(x=>x.a!==s.a).map(x=>`<option value="${x.a}" ${x.a===cmp?"selected":""}>${esc(A[x.a][0])} · ${f(x.r)}</option>`).join("");
+    $("card").innerHTML=`<h2>${esc(nm)}</h2><div class="note">${esc(d.pools[pool])}${noc?" · "+esc(noc):""}${s.age?" · "+String(s.age).replace(".",",")+" anni":""}</div>
+    <div class="h2h"><h3>Testa a testa: probabilità di vittoria</h3>
+    <select id="vs" aria-label="Avversario" style="width:100%"><option value="">Scegli un avversario…</option>${opts}</select>
+    <select id="surf" aria-label="Superficie" style="width:100%;margin-top:8px">${Object.entries(SURF).map(([k,v])=>`<option value="${k}" ${k===(window.__surf||"g")?"selected":""}>${v}</option>`).join("")}</select><div id="prob"></div></div>
+    <div class="big"><div>ELO<b class="sp">${f(s.r)}</b></div><div>Posizione<b>${rk}°</b></div><div>Picco<b>${f(s.peak)}</b></div><div>Rank ${esc(d.pools[pool])}<b>${s.tr??"–"}</b></div></div>
+    <div class="big"><div>Cemento<b>${f(s.surf.h)}</b></div><div>Terra<b>${f(s.surf.c)}</b></div><div>Erba<b>${f(s.surf.e)}</b></div></div>
+    <p class="note">Picco raggiunto nel ${esc(s.pm||"–")}. Valori calcolati da Tennis Abstract: niente storico incontri, quindi niente grafico.</p>`;
+    $("vs").onchange=e=>{cmp=e.target.value===""?null:+e.target.value;renderProb()};
+    $("surf").onchange=e=>{window.__surf=e.target.value;renderProb()};
+    renderProb();return;
+  }
+  const A=d.athletes,[nm,noc]=A[s.a],rk=c.byPool[pool].filter(x=>x.n>=+$("minm").value).findIndex(x=>x.a===s.a)+1;
+  const last=sport==="vela"?s.hist.slice(-10).reverse().map(([i,,dl,pos,N])=>{
+    const e=d.events[i];
+    return `<li><span class="res">${pos}°</span><span>${esc(d.tournaments[e[2]][0])}<small>${esc(d.tournaments[e[2]][1])} · ${pos}° su ${N} barche · ${e[0].slice(8,10)}/${e[0].slice(5,7)}/${e[0].slice(2,4)}</small></span><span class="${dl>0?"up":"dn"} num">${dl>0?"+":""}${Math.round(dl)}</span></li>`}).join(""):s.hist.slice(-10).reverse().map(([i,,dl])=>{
+    const m=d.matches[i],won=m[4]===s.a,o=A[won?m[5]:m[4]];
+    return `<li><span class="res ${won?"up":"dn"}">${won?"V":"S"}</span><span>${esc(o[0])}<span class="noc">${esc(o[1])}</span><small>${esc(d.tournaments[m[2]][0])} · ${esc(d.rounds[m[3]])} · ${esc(m[6])}</small></span><span class="${dl>0?"up":"dn"} num">${dl>0?"+":""}${Math.round(dl)}</span></li>`}).join("");
+  const opts=c.byPool[pool].filter(x=>x.a!==s.a&&x.n>=1).slice(0,300).map(x=>`<option value="${x.a}" ${x.a===cmp?"selected":""}>${esc(A[x.a][0])} (${esc(A[x.a][1])}) · ${Math.round(x.r)}</option>`).join("");
+  $("card").innerHTML=`<h2>${esc(nm)}</h2><div class="note">${esc(noc)} · ${esc(d.pools[pool])}</div>
+  <div class="h2h"><h3>Testa a testa: probabilità di vittoria</h3>
+  <select id="vs" aria-label="Avversario" style="width:100%"><option value="">Scegli un avversario…</option>${opts}</select><div id="prob"></div></div>
+  <div class="big"><div>ELO<b class="sp">${Math.round(s.r)}</b></div><div>Posizione<b>${rk?rk+"°":"–"}</b></div><div>Picco<b>${Math.round(s.peak)}</b></div>${sport==="vela"?`<div>Regate<b>${s.n}</b></div><div>Miglior piazz.<b>${s.best}°</b></div>`:`<div>V–S<b>${s.w}–${s.l}</b></div>`}</div>
+  <div class="fig"><svg id="ch" role="img" aria-label="Andamento ELO"></svg></div>
+  <ul class="ml">${last}</ul>`;
+  chart($("ch"),s.hist);
+  $("vs").onchange=e=>{cmp=e.target.value===""?null:+e.target.value;renderProb()};
+  renderProb();
+}
+
+function renderProb(){
+  const c=CALC[sport],A=DATA.sports[sport].athletes,a=c.R.get(pool+":"+sel),b=cmp!=null&&c.R.get(pool+":"+cmp);
+  if(!a||!b){$("prob").innerHTML="";return}
+  if(sport==="tennis"){
+    const k=window.__surf||"g",ra=a.surf[k],rb=b.surf[k];
+    if(ra==null||rb==null){$("prob").innerHTML='<p class="note">Rating su questa superficie non disponibile.</p>';return}
+    const pa=Math.round(100/(1+10**((rb-ra)/400)));
+    $("prob").innerHTML=`<div class="bar"><span class="a" style="width:${Math.max(pa,12)}%">${pa}%</span><span class="b" style="width:${Math.max(100-pa,12)}%">${100-pa}%</span></div>
+    <div class="note">${esc(A[a.a][0])} ${Math.round(ra)} contro ${esc(A[b.a][0])} ${Math.round(rb)} · ${SURF[k].toLowerCase()}</div>`;return;
+  }
+  const p=1/(1+10**((b.r-a.r)/400)),pa=Math.round(p*100);
+  const d=DATA.sports[sport];let hw=0,hl=0;
+  if(sport==="vela"){for(const e of d.events){if(e[1]!==pool)continue;const pa=e[3].find(x=>x[0]===a.a),pb=e[3].find(x=>x[0]===b.a);if(pa&&pb){if(pa[1]<pb[1])hw++;else if(pb[1]<pa[1])hl++}}}
+  else for(const m of d.matches){if(m[1]!==pool)continue;if(m[4]===a.a&&m[5]===b.a)hw++;else if(m[4]===b.a&&m[5]===a.a)hl++}
+  $("prob").innerHTML=`<div class="bar"><span class="a" style="width:${Math.max(pa,12)}%">${pa}%</span><span class="b" style="width:${Math.max(100-pa,12)}%">${100-pa}%</span></div>
+  <div class="note">${esc(A[a.a][0])} ${Math.round(a.r)} contro ${esc(A[b.a][0])} ${Math.round(b.r)} · ${sport==="vela"?"regate in comune, davanti":"precedenti nei dati"}: ${hw}–${hl}</div>`;
+}
+
+function recalc(){CALC={};for(const sp of Object.keys(SPORTS))CALC[sp]=compute(sp)}
+function all(){renderTabs();renderTable();renderCard()}
+
+$("tabs").onclick=e=>{const b=e.target.closest("[data-s]");if(!b)return;sport=b.dataset.s;pool=firstPool(sport);sel=cmp=null;shown=50;save();all()};
+$("pools").onclick=e=>{const b=e.target.closest("[data-p]");if(!b)return;pool=+b.dataset.p;sel=cmp=null;shown=50;all()};
+$("tb").onclick=e=>{const r=e.target.closest("tr[data-a]");if(!r)return;sel=+r.dataset.a;cmp=null;renderTable();renderCard();if(innerWidth<900)$("card").scrollIntoView({behavior:"smooth"})};
+$("q").oninput=()=>{shown=50;renderTable()};
+$("ita").onchange=$("minm").onchange=()=>{save();shown=50;renderTable();renderCard()};
+$("more").onclick=()=>{shown+=100;renderTable()};
+$("k").oninput=e=>{$("kv").textContent=e.target.value};
+$("k").onchange=e=>{K=+e.target.value;save();recalc();renderTable();renderCard()};
+$("weights").innerHTML="Pesi torneo — "+Object.entries(W).map(([s,o])=>`<b>${SPORTS[s]}</b>: `+Object.entries(o).map(([k,v])=>`${k} ×${String(v).replace(".",",")}`).join(", ")).join(" · ");
+
+if(st.sport in SPORTS)sport=st.sport;
+if(st.K){K=st.K;$("k").value=K;$("kv").textContent=K}
+if(st.ita)$("ita").checked=true;
+if(st.minm)$("minm").value=st.minm;
+
+const boot=j=>{
+  DATA=j;
+  const has=s=>DATA.sports[s]&&(DATA.sports[s].matches.length||DATA.sports[s].events?.length||DATA.sports[s].players?.length);
+  if(!has(sport))sport=Object.keys(SPORTS).find(has)||sport;
+  pool=firstPool(sport);recalc();all();
+};
+try{boot(JSON.parse(document.getElementById("elo-data").textContent))}
+catch(e){$("meta").textContent="Impossibile caricare i dati: "+e.message}
+}
+</script>
+</body>
+</html>
