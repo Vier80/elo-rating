@@ -1,0 +1,28 @@
+name: Aggiorna ELO Rating
+
+on:
+  workflow_dispatch:        # lancio a mano (pulsante "Run workflow") o da cron-job.org
+  schedule:
+    - cron: "17 5 * * *"    # ogni giorno alle 6:17 italiane (orario GitHub, non sempre puntuale)
+
+permissions:
+  contents: write
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Calcola e rigenera l'app
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: python agente_elo.py
+      - name: Pubblica
+        run: |
+          git config user.name "agente-elo"
+          git config user.email "agente-elo@users.noreply.github.com"
+          git add index.html tennis_atp.csv tennis_wta.csv
+          git diff --cached --quiet && echo "Nessuna novità" || (git commit -m "Aggiornamento ELO $(date +%F)" && git push)
