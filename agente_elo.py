@@ -30,6 +30,9 @@ DB = {
     "shooting":     "425f48c9aad981e68f6efec177da0173",
 }
 
+# Pugilato: nessun agente risultati, si usano i database "Risultati A" e "Risultati B" di OlympicHUB
+DB_BOXING = ["2caf48c9aad980bd88e2f102b48ea20a", "2cbf48c9aad98045aaf2d209eaa8f250"]
+
 # ---------------------------------------------------------------- Notion
 
 def notion_query(db_id):
@@ -60,6 +63,40 @@ def notion_query(db_id):
             return rows
         cursor = data.get("next_cursor")
         time.sleep(0.35)  # Notion: massimo ~3 richieste al secondo
+
+
+def notion_page(page_id, cache={}):
+    """Una singola pagina Notion (usata per i nomi degli atleti del pugilato)."""
+    if page_id in cache:
+        return cache[page_id]
+    req = urllib.request.Request(f"https://api.notion.com/v1/pages/{page_id}", headers={
+        "Authorization": f"Bearer {NOTION_TOKEN}", "Notion-Version": NOTION_VERSION})
+    for tentativo in range(6):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                cache[page_id] = json.load(r)
+                time.sleep(0.35)
+                return cache[page_id]
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 502, 503, 504):
+                time.sleep(2 * (tentativo + 1))
+                continue
+            cache[page_id] = None
+            return None
+    cache[page_id] = None
+    return None
+
+
+def rel_ids(page, name):
+    p = page.get("properties", {}).get(name) or {}
+    return [x.get("id", "") for x in p.get("relation") or []]
+
+
+def page_title(page):
+    for p in (page or {}).get("properties", {}).values():
+        if p.get("type") == "title":
+            return "".join(x.get("plain_text", "") for x in p.get("title") or [])
+    return ""
 
 
 def val(page, name):
@@ -307,6 +344,76 @@ def build_shooting(rows):
     return {"pools": pool_l, "tournaments": tourn_l, "rounds": [], "athletes": ent_list,
             "matches": [], "events": evl, "skipped": skipped}
 
+BOX_POS = {"1": 1, "2": 2, "3": 3, "SF": 3, "QF": 5, "R16": 9, "R32": 17, "R64": 33}
+
+
+def boxing_level(ev):
+    e = ev.lower()
+    if "final" in e and "worldcup" in e:
+        return "Finale di Coppa del Mondo"
+    if "worldcup" in e or "world cup" in e:
+        return "Coppa del Mondo"
+    if "wb" in e or "iba" in e or "world" in e:
+        return "Mondiali"
+    if any(x in e for x in ("asian", "euro", "afric", "pan", "ocean", "americ")):
+        return "Campionati continentali"
+    if "meg" in e or "games" in e:
+        return "Giochi continentali"
+    return "Altri tornei"
+
+
+def righe_boxing():
+    """Righe pugilato da Risultati A e B: data, evento, livello, disciplina, atleta, noc, posizione."""
+    pages = []
+    for db in DB_BOXING:
+        pages += notion_query(db)
+    rows, best = [], {}
+    for pg in pages:
+        sport, ev = val(pg, "Sport"), val(pg, "Evento")
+        if sport != "Boxing" and "🥊" not in ev:
+            continue
+        if val(pg, "CAT") in ("Youth", "Junior", "U23"):
+            continue
+        pos = BOX_POS.get(val(pg, "Result").strip().upper())
+        ids = rel_ids(pg, "Athlete")
+        anno, mese = val(pg, "Anno"), val(pg, "Mese")
+        if not pos or not ids or not anno:
+            continue
+        data = f"{anno}-{int(mese):02d}-15" if mese else f"{anno}-07-01"
+        k = (ev, val(pg, "Disciplina"), ids[0])
+        if k not in best or pos < best[k][-1]:
+            best[k] = [data, ev, boxing_level(ev), val(pg, "Disciplina"), ids[0], pos]
+    for data, ev, lvl, disc, aid, pos in best.values():
+        ap = notion_page(aid)
+        name = val(ap, "Cognome e Nome") if ap else ""
+        name = name or page_title(ap) or aid
+        noc = re.sub(r"[^A-Z]", "", val(ap, "NOC") if ap else "")[-3:]
+        rows.append([data, ev, lvl, disc, name.strip(), noc, pos])
+    return rows
+
+
+def build_boxing(rows):
+    pools, tourns, ents, ent_list, pool_l, tourn_l, events = {}, {}, {}, [], [], [], {}
+    for data, ev, lvl, disc, name, noc, pos in rows:
+        k = name.upper()
+        if k not in ents:
+            ents[k] = len(ent_list)
+            ent_list.append([name, noc])
+        elif noc:
+            ent_list[ents[k]][1] = noc
+        if disc not in pools:
+            pools[disc] = len(pool_l)
+            pool_l.append(disc)
+        if (ev, lvl) not in tourns:
+            tourns[(ev, lvl)] = len(tourn_l)
+            tourn_l.append([ev, lvl])
+        events.setdefault((data, pools[disc], tourns[(ev, lvl)]), {})[ents[k]] = pos
+    evl = [[d, p, t, sorted(([a, pos] for a, pos in res.items()), key=lambda x: x[1])]
+           for (d, p, t), res in sorted(events.items()) if len(res) >= 2]
+    print(f"  pugilato: {len(evl)} tornei/categorie, {len(ent_list)} pugili")
+    return {"pools": pool_l, "tournaments": tourn_l, "rounds": [], "athletes": ent_list,
+            "matches": [], "events": evl, "skipped": 0}
+
 # ---------------------------------------------------------------- tennis (Tennis Abstract)
 
 ITA_TENNIS = {"Jannik Sinner", "Lorenzo Musetti", "Flavio Cobolli", "Matteo Berrettini", "Luciano Darderi",
@@ -420,6 +527,8 @@ def main():
         rows = righe_incontri(sport, pages)
         out["sports"][sport] = (build_vela(rows) if sport == "vela" else build_shooting(rows) if sport == "shooting"
                                 else build_incontri(sport, rows))
+    print("Pugilato (Risultati A e B)…")
+    out["sports"]["boxing"] = build_boxing(righe_boxing())
     print("Tennis Abstract…")
     aggiorna_tennis()
     out["sports"]["tennis"] = build_tennis()

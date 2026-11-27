@@ -23,6 +23,7 @@ body[data-sport=judo]{--sp:light-dark(#c94a4a,#f08a8a);--spl:light-dark(#fbe9e9,
 body[data-sport=tennistavolo]{--sp:light-dark(#6a3fa0,#b99be6);--spl:light-dark(#efe8f8,#2a1d3d)}
 body[data-sport=squash]{--sp:light-dark(#c8620f,#f5a35c);--spl:light-dark(#fcecdd,#3a2414)}
 body[data-sport=tennis]{--sp:light-dark(#5f7d00,#bcd94a);--spl:light-dark(#f0f6dc,#25300c)}
+body[data-sport=boxing]{--sp:light-dark(#3b4252,#aab4c8);--spl:light-dark(#eceff4,#1f242d)}
 body[data-sport=shooting]{--sp:light-dark(#8a6d1f,#e0c46c);--spl:light-dark(#f6f0dd,#332a10)}
 body[data-sport=vela]{--sp:light-dark(#0b6fa8,#6cc4f0);--spl:light-dark(#e3f1fa,#10283a)}
 body[data-sport=wrestling]{--sp:light-dark(#3f7d2c,#8fd174);--spl:light-dark(#e9f4e4,#1d3316)}
@@ -112,6 +113,7 @@ summary{cursor:pointer;font-weight:600;min-height:32px}
     <p id="weights"></p>
     <p>Vela: ogni regata conta come un confronto con tutte le altre barche della classifica finale. Chi arriva davanti a una barca la "batte"; la variazione è la somma di vittorie meno attese su tutte le barche, divisa per il numero di avversari e moltiplicata per K × peso evento × 3. Nelle prime 3 regate di una barca il fattore è ×1,5. Escluse le barche mai partite.</p>
     <p>Tiro: ogni gara ISSF diventa una classifica (prima i finalisti nell'ordine della finale, poi gli altri secondo la qualificazione) e si calcola come la vela. Nelle prove a squadre miste la coppia conta come un'unica entità.</p>
+    <p>Pugilato: non c'è un agente risultati; uso i piazzamenti dei database Risultati A e B (1°, 2°, semifinale = 3°, quarti = 5°, ottavi = 9°), solo categoria senior, e calcolo come la vela. Gli incontri singoli non sono disponibili, quindi è il rating meno preciso dell'app.</p>
     <p>Tennis: qui l'ELO non è calcolato dall'app ma ripreso da Tennis Abstract (tennisabstract.com), primi 200 giocatori ATP e 200 WTA, con i rating per superficie. È su una scala diversa dagli altri sport. NOC indicato solo per i giocatori italiani.</p>
     <p>Incontri esclusi: walkover, gare a squadre della scherma, righe senza vincitore determinabile. Fonte: i database Notion Agente Badminton, Agente Scherma, Agente Judo, Agente Wrestling, Agente Tennis Tavolo, Agente Squash, Agente Vela e Agente Shooting.</p>
   </details>
@@ -119,9 +121,9 @@ summary{cursor:pointer;font-weight:600;min-height:32px}
 <script type="application/json" id="elo-data">__DATA__</script>
 <script>
 {
-const SPORTS={badminton:"Badminton",judo:"Judo",wrestling:"Lotta",scherma:"Scherma",squash:"Squash",tennis:"Tennis",tennistavolo:"Tennistavolo",shooting:"Tiro",vela:"Vela"};
-const EV=s=>s==="vela"||s==="shooting";
-const VOC={vela:{ev:"regate",Ev:"Regate",ent:"barche"},shooting:{ev:"gare",Ev:"Gare",ent:"tiratori"}};
+const SPORTS={badminton:"Badminton",judo:"Judo",wrestling:"Lotta",boxing:"Pugilato",scherma:"Scherma",squash:"Squash",tennis:"Tennis",tennistavolo:"Tennistavolo",shooting:"Tiro",vela:"Vela"};
+const EV=s=>s==="vela"||s==="shooting"||s==="boxing";
+const VOC={vela:{ev:"regate",Ev:"Regate",ent:"barche"},shooting:{ev:"gare",Ev:"Gare",ent:"tiratori"},boxing:{ev:"tornei",Ev:"Tornei",ent:"pugili"}};
 const W={
   badminton:{"Mondiali":1.3,"Super 1000":1.2,"Super 750":1.15,"Super 500":1.05,"Super 300":1},
   scherma:{"Campionati del Mondo":1.3,"Grand Prix":1.15,"Campionati continentali":1.05,"Coppa del Mondo":1},
@@ -129,6 +131,7 @@ const W={
   wrestling:{"Olimpiadi":1.4,"Mondiali":1.3,"Campionati continentali":1.05,"Giochi continentali":1,"Ranking Series":1,"Altri tornei":.85},
   tennistavolo:{"Mondiali":1.3,"WTT Finals":1.25,"World Cup":1.2,"Smash":1.15,"Champions":1.1,"Star Contender":1,"Contender":.9},
   squash:{"Mondiali":1.3,"Tour Finals":1.2,"PSA World Tour":1},
+  boxing:{"Mondiali":1.3,"Finale di Coppa del Mondo":1.2,"Campionati continentali":1.05,"Coppa del Mondo":1,"Giochi continentali":1,"Altri tornei":.9},
   shooting:{"Campionati del Mondo":1.3,"Finale di Coppa del Mondo":1.2,"Campionati continentali":1.05,"Coppa del Mondo":1,"Giochi continentali":1},
   vela:{"Olimpiadi":1.4,"Mondiali":1.3,"Sailing Grand Slam":1.1,"Europei":1.05,"Giochi continentali":1,"Altre regate":.9}};
 const VELA_F=3;
@@ -198,8 +201,8 @@ function renderTabs(){
   const d=DATA.sports[sport];
   const WL={"Freestyle":"Libera","Greco-Roman":"Greco-romana","Women's Wrestling":"Femminile"};
   const VL={"Men's Laser ILCA 7":"ILCA 7","Men's iQFOIL":"iQFOiL","Men's 49er":"49er","Men's Kite":"Formula Kite","Women's Laser Radial ILCA 6":"ILCA 6","Women's iQFOIL":"iQFOiL","Women's 49er FX":"49er FX","Women's Kite":"Formula Kite","Mixed 470":"470","Nacra 17":"Nacra 17"};
-  const lab=n=>sport==="wrestling"?n.replace(/^.*?(\d+ kg)$/,"$1"):sport==="vela"?(VL[n]||n):sport==="shooting"?n.replace(/^. · /,"").replace(" squadra mista",""):n;
-  const head=r=>{if(sport==="shooting"){const n=d.pools[r[0]];return `<span class="rowlab">${n.startsWith("M ")?"Maschile":n.startsWith("F ")?"Femminile":"Misto"}</span>`}if(sport==="vela"){const n=d.pools[r[0]];return `<span class="rowlab">${n.startsWith("Men")?"Maschile":n.startsWith("Women")?"Femminile":"Misto"}</span>`}if(sport!=="wrestling")return"";const s=d.pools[r[0]].replace(/ \d+ kg$/,"");return `<span class="rowlab">${esc(WL[s]||s)}</span>`};
+  const lab=n=>sport==="wrestling"?n.replace(/^.*?(\d+ kg)$/,"$1"):sport==="vela"?(VL[n]||n):sport==="shooting"?n.replace(/^. · /,"").replace(" squadra mista",""):sport==="boxing"?n.replace(/^\S+ /,"").replace(/kg$/," kg"):n;
+  const head=r=>{if(sport==="boxing"){return `<span class="rowlab">${d.pools[r[0]].startsWith("Men")?"Maschile":"Femminile"}</span>`}if(sport==="shooting"){const n=d.pools[r[0]];return `<span class="rowlab">${n.startsWith("M ")?"Maschile":n.startsWith("F ")?"Femminile":"Misto"}</span>`}if(sport==="vela"){const n=d.pools[r[0]];return `<span class="rowlab">${n.startsWith("Men")?"Maschile":n.startsWith("Women")?"Femminile":"Misto"}</span>`}if(sport!=="wrestling")return"";const s=d.pools[r[0]].replace(/ \d+ kg$/,"");return `<span class="rowlab">${esc(WL[s]||s)}</span>`};
   const chip=i=>`<button class="chip" aria-pressed="${i===pool}" data-p="${i}">${esc(lab(d.pools[i]))}</button>`;
   $("pools").innerHTML=poolRows(sport).map(r=>`<div class="chiprow">${head(r)}${r.map(chip).join("")}</div>`).join("")||'<span class="empty">Nessun dato caricato per questo sport.</span>';
   document.body.dataset.sport=sport;
@@ -216,6 +219,10 @@ const ORDER={badminton:[["MS","WS","MD","WD","XD"]],tennistavolo:[["MS","WS","MD
   shooting:[["M · Carabina 10m","M · Carabina 50m 3 posizioni","M · Pistola 10m","M · Pistola 25m automatica","M · Trap","M · Skeet"],["F · Carabina 10m","F · Carabina 50m 3 posizioni","F · Pistola 10m","F · Pistola 25m","F · Trap","F · Skeet"],["X · Carabina 10m squadra mista","X · Pistola 10m squadra mista","X · Trap squadra mista","X · Skeet squadra mista"]],squash:[["Maschile","Femminile"]],vela:[["Men's Laser ILCA 7","Men's iQFOIL","Men's 49er","Men's Kite"],["Women's Laser Radial ILCA 6","Women's iQFOIL","Women's 49er FX","Women's Kite"],["Mixed 470","Nacra 17"]],judo:[["M -60 kg","M -66 kg","M -73 kg","M -81 kg","M -90 kg","M -100 kg","M +100 kg"],["F -48 kg","F -52 kg","F -57 kg","F -63 kg","F -70 kg","F -78 kg","F +78 kg"]]};
 function poolRows(sp){
   const P=DATA.sports[sp].pools,o=ORDER[sp];
+  if(sp==="boxing"){
+    const kg=n=>parseFloat(n.replace(/^\D*/,""))+(n.includes("+")?1000:0);
+    return ["Men's","Women's"].map(s=>P.map((n,i)=>[n,i]).filter(([n])=>n.startsWith(s+" ")).sort((a,b)=>kg(a[0])-kg(b[0])).map(x=>x[1])).filter(r=>r.length);
+  }
   if(sp==="wrestling"){
     const kg=n=>parseFloat(n.replace(/^\D*/,""));
     return ["Freestyle","Greco-Roman","Women's Wrestling"].map(s=>P.map((n,i)=>[n,i]).filter(([n])=>n.startsWith(s+" ")).sort((a,b)=>kg(a[0])-kg(b[0])).map(x=>x[1])).filter(r=>r.length);
