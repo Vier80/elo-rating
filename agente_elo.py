@@ -35,12 +35,21 @@ DB_BOXING = ["2caf48c9aad980bd88e2f102b48ea20a", "2cbf48c9aad98045aaf2d209eaa8f2
 
 # ---------------------------------------------------------------- Notion
 
-def notion_query(db_id):
-    """Tutte le righe di un database Notion (100 per volta)."""
+def notion_get(path):
+    req = urllib.request.Request(f"https://api.notion.com/v1/{path}", headers={
+        "Authorization": f"Bearer {NOTION_TOKEN}", "Notion-Version": NOTION_VERSION})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
+
+
+def notion_query(db_id, filtro=None):
+    """Tutte le righe di un database Notion (100 per volta), con un filtro facoltativo."""
     url = f"https://api.notion.com/v1/databases/{db_id}/query"
     rows, cursor, tentativi = [], None, 0
     while True:
         body = {"page_size": 100}
+        if filtro:
+            body["filter"] = filtro
         if cursor:
             body["start_cursor"] = cursor
         req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
@@ -362,11 +371,32 @@ def boxing_level(ev):
     return "Altri tornei"
 
 
+def boxing_filter(db_id):
+    """Chiede a Notion solo le righe del pugilato: Sport = Boxing oppure un Evento con 🥊 / WB / IBA."""
+    try:
+        props = notion_get(f"databases/{db_id}").get("properties", {})
+    except Exception as e:
+        print(f"  pugilato: schema non leggibile per {db_id} ({e})")
+        return None
+    cond = []
+    for name, want in (("Sport", lambda o: o == "Boxing"),
+                       ("Evento", lambda o: "🥊" in o or "WB" in o or "IBA" in o)):
+        pr = props.get(name) or {}
+        if pr.get("type") == "select":
+            cond += [{"property": name, "select": {"equals": o["name"]}}
+                     for o in pr["select"].get("options", []) if want(o["name"])]
+    if not cond:
+        return None
+    return {"or": cond[:100]} if len(cond) > 1 else cond[0]
+
+
 def righe_boxing():
     """Righe pugilato da Risultati A e B: data, evento, livello, disciplina, atleta, noc, posizione."""
     pages = []
     for db in DB_BOXING:
-        pages += notion_query(db)
+        filtro = boxing_filter(db)
+        if filtro:
+            pages += notion_query(db, filtro)
     rows, best = [], {}
     for pg in pages:
         sport, ev = val(pg, "Sport"), val(pg, "Evento")
