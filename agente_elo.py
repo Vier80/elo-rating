@@ -354,37 +354,42 @@ def build_shooting(rows):
             "matches": [], "events": evl, "skipped": skipped}
 
 BOX_POS = {"1": 1, "2": 2, "3": 3, "SF": 3, "QF": 5, "R16": 9, "R32": 17, "R64": 33}
+# Categorie di peso del pugilato (World Boxing): servono a riconoscere le righe del pugilato dalla Disciplina
+BOX_KG = {"Men's": {"50", "55", "60", "65", "70", "75", "80", "85", "90", "+90"},
+          "Women's": {"48", "51", "54", "57", "60", "65", "70", "75", "80", "+80"}}
+NON_BOXE = ("iwf", "ewf", "🏋", "weight", "judo", "tae", "🥋", "🙅", "wtt", "aquatics", "fencing", "open")
+
+
+def is_box_disc(d):
+    m = re.fullmatch(r"(Men's|Women's) (\+?\d+)kg", (d or "").strip())
+    return bool(m) and m.group(2) in BOX_KG[m.group(1)]
 
 
 def boxing_level(ev):
     e = ev.lower()
-    if "final" in e and "worldcup" in e:
-        return "Finale di Coppa del Mondo"
     if "worldcup" in e or "world cup" in e:
-        return "Coppa del Mondo"
-    if "wb" in e or "iba" in e or "world" in e:
+        return "Finale di Coppa del Mondo" if "final" in e else "Coppa del Mondo"
+    if "wb" in e or "iba" in e:
         return "Mondiali"
-    if any(x in e for x in ("asian", "euro", "afric", "pan", "ocean", "americ")):
+    if "🇪🇺" in ev or any(x in e for x in ("asian", "euro", "afric", "panam", "pan-am", "ocean")):
         return "Campionati continentali"
-    if "meg" in e or "games" in e:
+    if any(x in e for x in ("games", "meg", "ag20", "cwg")):
         return "Giochi continentali"
     return "Altri tornei"
 
 
 def boxing_filter(db_id):
-    """Chiede a Notion solo le righe del pugilato: Sport = Boxing oppure un Evento con 🥊 / WB / IBA."""
+    """Chiede a Notion solo le righe con una categoria di peso del pugilato (colonna Disciplina)."""
     try:
         props = notion_get(f"databases/{db_id}").get("properties", {})
     except Exception as e:
         print(f"  pugilato: schema non leggibile per {db_id} ({e})")
         return None
-    cond = []
-    for name, want in (("Sport", lambda o: o == "Boxing"),
-                       ("Evento", lambda o: "🥊" in o or "WB" in o or "IBA" in o)):
-        pr = props.get(name) or {}
-        if pr.get("type") == "select":
-            cond += [{"property": name, "select": {"equals": o["name"]}}
-                     for o in pr["select"].get("options", []) if want(o["name"])]
+    pr = props.get("Disciplina") or {}
+    if pr.get("type") != "select":
+        return None
+    cond = [{"property": "Disciplina", "select": {"equals": o["name"]}}
+            for o in pr["select"].get("options", []) if is_box_disc(o["name"])]
     if not cond:
         return None
     return {"or": cond[:100]} if len(cond) > 1 else cond[0]
@@ -399,20 +404,23 @@ def righe_boxing():
             pages += notion_query(db, filtro)
     rows, best = [], {}
     for pg in pages:
-        sport, ev = val(pg, "Sport"), val(pg, "Evento")
-        if sport != "Boxing" and "🥊" not in ev:
+        sport, ev, disc = val(pg, "Sport"), val(pg, "Evento"), val(pg, "Disciplina")
+        if sport not in ("", "Boxing") or not is_box_disc(disc) or not ev:
+            continue
+        if sport != "Boxing" and any(x in ev.lower() for x in NON_BOXE):
             continue
         if val(pg, "CAT") in ("Youth", "Junior", "U23"):
             continue
-        pos = BOX_POS.get(val(pg, "Result").strip().upper())
+        res = val(pg, "Result").strip().upper()
+        pos = BOX_POS.get(res) or (int(res) if res.isdigit() and int(res) in (5, 9, 17, 33) else None)
         ids = rel_ids(pg, "Athlete")
         anno, mese = val(pg, "Anno"), val(pg, "Mese")
         if not pos or not ids or not anno:
             continue
         data = f"{anno}-{int(mese):02d}-15" if mese else f"{anno}-07-01"
-        k = (ev, val(pg, "Disciplina"), ids[0])
+        k = (ev, disc, ids[0])
         if k not in best or pos < best[k][-1]:
-            best[k] = [data, ev, boxing_level(ev), val(pg, "Disciplina"), ids[0], pos]
+            best[k] = [data, ev, boxing_level(ev), disc, ids[0], pos]
     for data, ev, lvl, disc, aid, pos in best.values():
         ap = notion_page(aid)
         name = val(ap, "Cognome e Nome") if ap else ""
