@@ -333,7 +333,7 @@ function renderProb(){
 function recalc(){CALC={};for(const sp of Object.keys(SPORTS))CALC[sp]=compute(sp)}
 function all(){renderTabs();renderTable();renderCard()}
 
-$("tabs").onclick=e=>{const b=e.target.closest("[data-s]");if(!b)return;sport=b.dataset.s;pool=firstPool(sport);sel=cmp=null;shown=50;save();all()};
+$("tabs").onclick=e=>{const b=e.target.closest("[data-s]");if(!b)return;sport=b.dataset.s;pool=firstPool(sport);if(EV(sport)&&+$("minm").value>3)$("minm").value="1";sel=cmp=null;shown=50;save();all()};
 $("pools").onclick=e=>{const b=e.target.closest("[data-p]");if(!b)return;pool=+b.dataset.p;sel=cmp=null;shown=50;all()};
 $("tb").onclick=e=>{const r=e.target.closest("tr[data-a]");if(!r)return;sel=+r.dataset.a;cmp=null;renderTable();renderCard();if(innerWidth<900)$("card").scrollIntoView({behavior:"smooth"})};
 $("q").oninput=()=>{shown=50;renderTable()};
