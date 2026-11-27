@@ -27,6 +27,7 @@ DB = {
     "squash":       "40ef48c9aad980dba869dddc0c5ed879",
     "tennistavolo": "41df48c9aad9819f90e9fed635bcf84a",
     "vela":         "41bf48c9aad98176aeb3d4c671fd9089",
+    "shooting":     "425f48c9aad981e68f6efec177da0173",
 }
 
 # ---------------------------------------------------------------- Notion
@@ -120,6 +121,9 @@ def righe_incontri(sport, pages):
             r = [g("Data fine") or g("Data inizio"), g("Evento"), g("Tipo Evento"), g("Classe"), g("Barca"),
                  g("Timoniere"), g("Prodiere"), g("NOC"), g("ID WS 1"), g("ID WS 2"), g("Posizione"),
                  g("Barche in classifica"), g("Punti netti"), g("Note")]
+        elif sport == "shooting":
+            r = [g("Data"), g("Torneo"), g("Livello"), g("Gender"), g("Disciplina"), g("Fase"), g("Nome"),
+                 g("Membri"), g("NOC"), g("ID ISSF"), g("Pos"), g("Punteggio"), g("Note"), g("ID ISSF membri")]
         else:
             continue
         out.append(r)
@@ -260,6 +264,49 @@ def build_vela(rows):
     return {"pools": pool_l, "tournaments": tourn_l, "rounds": [], "athletes": ent_list,
             "matches": [], "events": evl, "skipped": skipped}
 
+def build_shooting(rows):
+    """Classifica finale di ogni gara ISSF: prima i finalisti (ordine della finale),
+    poi gli altri nell'ordine della qualificazione. Campi: 0 data, 1 torneo, 2 livello, 3 gender,
+    4 disciplina, 5 fase, 6 nome, 7 membri, 8 noc, 9 id, 10 pos, 11 punteggio, 12 note, 13 id membri"""
+    G = {"Men": "M", "Women": "F", "Mixed": "X"}
+    comps, skipped = {}, 0
+    for f in rows:
+        if len(f) != 14 or not f[0] or not f[10]:
+            skipped += 1
+            continue
+        team = f[3] == "Mixed"
+        name = (" / ".join(sorted(x.strip() for x in f[7].split("/"))) if team and f[7] else f[6]).strip()
+        if not name:
+            skipped += 1
+            continue
+        c = comps.setdefault((f[1].strip(), f[3], f[4].strip()), {"date": f[0][:10], "lvl": f[2].strip(), "q": {}, "f": {}})
+        c["date"] = max(c["date"], f[0][:10])
+        (c["f"] if f[5] == "Finale" else c["q"])[name.upper()] = (int(float(f[10])), name, f[8].strip())
+    pools, tourns, ents, ent_list, pool_l, tourn_l, evl = {}, {}, {}, [], [], [], []
+    for (torneo, gender, disc), c in sorted(comps.items(), key=lambda x: x[1]["date"]):
+        order = sorted(c["f"].items(), key=lambda x: x[1][0])
+        order += sorted(((k, v) for k, v in c["q"].items() if k not in c["f"]), key=lambda x: x[1][0])
+        if len(order) < 2:
+            continue
+        pk = f"{G.get(gender, gender)} · {disc}"
+        if pk not in pools:
+            pools[pk] = len(pool_l)
+            pool_l.append(pk)
+        tk = (torneo, c["lvl"])
+        if tk not in tourns:
+            tourns[tk] = len(tourn_l)
+            tourn_l.append(list(tk))
+        res = []
+        for pos, (k, (_, name, noc)) in enumerate(order, 1):
+            if k not in ents:
+                ents[k] = len(ent_list)
+                ent_list.append([name, noc])
+            res.append([ents[k], pos])
+        evl.append([c["date"], pools[pk], tourns[tk], res])
+    print(f"  shooting: {len(evl)} gare, {len(ent_list)} tiratori/squadre, scartati {skipped}")
+    return {"pools": pool_l, "tournaments": tourn_l, "rounds": [], "athletes": ent_list,
+            "matches": [], "events": evl, "skipped": skipped}
+
 # ---------------------------------------------------------------- tennis (Tennis Abstract)
 
 ITA_TENNIS = {"Jannik Sinner", "Lorenzo Musetti", "Flavio Cobolli", "Matteo Berrettini", "Luciano Darderi",
@@ -316,7 +363,7 @@ def parse_tennis_abstract(page):
             break
     if len(out) < 50:
         raise ValueError(f"solo {len(out)} righe lette")
-    m = re.search(r"(20\d\d-\d\d-\d\d)", page)
+    m = re.search(r"[Ll]ast\s+update[^0-9]{0,40}(20\d\d-\d\d-\d\d)", page) or re.search(r"(20\d\d-\d\d-\d\d)", page)
     return (m.group(1) if m else datetime.date.today().isoformat()), out
 
 
@@ -371,7 +418,8 @@ def main():
         pages = notion_query(db)
         print(f"  {sport}: {len(pages)} righe lette")
         rows = righe_incontri(sport, pages)
-        out["sports"][sport] = build_vela(rows) if sport == "vela" else build_incontri(sport, rows)
+        out["sports"][sport] = (build_vela(rows) if sport == "vela" else build_shooting(rows) if sport == "shooting"
+                                else build_incontri(sport, rows))
     print("Tennis Abstract…")
     aggiorna_tennis()
     out["sports"]["tennis"] = build_tennis()
